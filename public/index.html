@@ -30,14 +30,14 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebas
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 import { getFirestore, collection, doc, getDoc, getDocs, query, where, limit, onSnapshot, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-// Replace this with Firebase Console > Project settings > Your apps > Web app config.
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.firebasestorage.app",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAU0NrCBT8Rs9VcHiIAzuZJn4POaFCpRXc",
+  authDomain: "friend-stock-market.firebaseapp.com",
+  projectId: "friend-stock-market",
+  storageBucket: "friend-stock-market.firebasestorage.app",
+  messagingSenderId: "862801138390",
+  appId: "1:862801138390:web:a4041eb2b64bcc9ea06f77"
 };
 
 const app = initializeApp(firebaseConfig);
