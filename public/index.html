@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pretend Market - Free Edition</title>
+  <style>
+    :root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:#172033; background:#f5f7fb; }
+    *{box-sizing:border-box} body{margin:0} button,input{font:inherit}.app{min-height:100vh}
+    .topbar{height:70px;background:white;border-bottom:1px solid #e6eaf0;display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:5}
+    .brand{font-weight:800;letter-spacing:-.03em;font-size:20px}.brand span{font-weight:500;color:#7c8699}.userbar{display:flex;align-items:center;gap:12px;color:#5d687c;font-size:14px}
+    .container{max-width:1200px;margin:0 auto;padding:28px}.grid{display:grid;grid-template-columns:1.6fr 1fr;gap:20px}.card{background:#fff;border:1px solid #e6eaf0;border-radius:18px;box-shadow:0 8px 30px rgba(21,32,51,.04)}
+    .card h2{margin:0;font-size:18px}.section-head{padding:20px 20px 12px;display:flex;justify-content:space-between;align-items:center}.pill{background:#f0f3f8;border-radius:999px;padding:6px 10px;font-size:12px;color:#647087}
+    table{width:100%;border-collapse:collapse}th,td{padding:14px 20px;border-top:1px solid #eef1f5;text-align:left;font-size:14px}th{color:#7a8497;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+    .stock-row{cursor:pointer}.stock-row:hover{background:#f9fbfd}.symbol{font-weight:800}.muted{color:#7b8597}.up{color:#16865b}.down{color:#c74343}.trade{padding:20px}.trade-tabs{display:flex;gap:8px;margin-bottom:16px}
+    .tab{flex:1;border:1px solid #dfe4eb;background:#fff;border-radius:10px;padding:10px;cursor:pointer;font-weight:700}.tab.active{background:#172033;color:#fff;border-color:#172033}
+    label{display:block;font-size:12px;color:#69758a;margin:0 0 6px}input{width:100%;border:1px solid #dce2ea;border-radius:10px;padding:11px 12px;outline:none}input:focus{border-color:#8290a8;box-shadow:0 0 0 3px rgba(130,144,168,.12)}
+    .field{margin-bottom:14px}.quote{background:#f7f9fc;border-radius:12px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.quote strong{display:block;margin-top:3px}
+    .primary{width:100%;border:0;border-radius:11px;padding:12px 14px;background:#172033;color:#fff;font-weight:800;cursor:pointer}.primary:disabled{opacity:.45;cursor:not-allowed}.secondary{border:1px solid #dfe4eb;background:#fff;border-radius:10px;padding:9px 12px;cursor:pointer}
+    .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}.stat{padding:18px}.stat .k{color:#7b8597;font-size:12px}.stat .v{margin-top:8px;font-size:25px;font-weight:800;letter-spacing:-.03em}
+    .notice{margin-bottom:20px;padding:12px 14px;background:#eef6ff;border:1px solid #cfe3ff;color:#2e5d91;border-radius:12px;font-size:14px}.auth-wrap{min-height:100vh;display:grid;place-items:center;padding:20px}.auth{width:min(430px,100%);padding:28px}.auth h1{margin:0 0 8px;letter-spacing:-.04em}.auth p{margin:0 0 22px;color:#758096}.auth-toggle{margin-top:14px;text-align:center;font-size:13px;color:#6e788b}.link{color:#172033;text-decoration:underline;cursor:pointer}
+    .error{color:#b33f3f;background:#fff2f2;border:1px solid #ffd8d8;padding:10px 12px;border-radius:10px;margin-bottom:14px;font-size:13px}.success{color:#1c6b4c;background:#effaf4;border:1px solid #c9f0dd;padding:10px 12px;border-radius:10px;margin-bottom:14px;font-size:13px}.empty{padding:30px 20px;color:#7b8597;text-align:center}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}.stat-grid{grid-template-columns:1fr}.topbar{padding:0 16px}.container{padding:16px}th,td{padding:12px 10px}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, deleteUser } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, query, where, limit, onSnapshot, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+// Replace this with Firebase Console > Project settings > Your apps > Web app config.
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.firebasestorage.app",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const MAX_MEMBERS = 10;
+const STARTING_CREDITS = 1000;
+const state = { stocks: [], profile: null, memberCount: 0, selected: null, side:'buy', error:null, message:null };
+let unsubStocks = null, unsubProfile = null, unsubMarket = null;
+const root = document.getElementById('root');
+
+function esc(s){ return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function credits(v){ return `${Math.round(Number(v||0)).toLocaleString()} credits`; }
+function pct(now,prev){ if(!prev)return 0; return ((now-prev)/prev)*100; }
+function portfolioValue(){ return Object.entries(state.profile?.holdings||{}).reduce((sum,[sym,q])=>sum+Number(state.stocks.find(s=>s.symbol===sym)?.price||0)*Number(q||0),0); }
+
+function render(){
+  if(!auth.currentUser) return renderAuth();
+  const p=state.profile;
+  root.innerHTML=`<div class="app"><div class="topbar"><div class="brand">Pretend <span>Market</span></div><div class="userbar"><strong>${esc(p?.username || auth.currentUser.displayName || 'Trader')}</strong><button class="secondary" id="logout">Sign out</button></div></div><main class="container">
+    ${state.error?`<div class="error">${esc(state.error)}</div>`:''}${state.message?`<div class="success">${esc(state.message)}</div>`:''}
+    <div class="stat-grid"><div class="card stat"><div class="k">Practice credits</div><div class="v">${credits(p?.credits)}</div></div><div class="card stat"><div class="k">Portfolio value</div><div class="v">${credits(portfolioValue())}</div></div><div class="card stat"><div class="k">Members</div><div class="v">${state.memberCount} / ${MAX_MEMBERS}</div></div></div>
+    <div class="notice">100% fictional market. No real money, payments, deposits, withdrawals, or financial accounts are used. Everyone starts with ${STARTING_CREDITS.toLocaleString()} practice credits.</div>
+    <div class="grid"><section class="card"><div class="section-head"><h2>Market</h2><span class="pill">${state.stocks.length} stocks</span></div>${state.stocks.length?`<table><thead><tr><th>Stock</th><th>Price</th><th>Move</th><th>You own</th></tr></thead><tbody>${state.stocks.map(row).join('')}</tbody></table>`:`<div class="empty">No stocks yet. Add stocks in Firestore using the setup guide.</div>`}</section>
+      <section class="card"><div class="section-head"><h2>Trade</h2><span class="pill">Practice only</span></div><div class="trade">${tradeForm()}</div></section></div>
+    <section class="card" style="margin-top:20px"><div class="section-head"><h2>Your holdings</h2></div>${holdingsTable()}</section>
+  </main></div>`;
+  document.getElementById('logout').onclick=()=>signOut(auth);
+  document.querySelectorAll('[data-symbol]').forEach(el=>el.onclick=()=>{state.selected=state.stocks.find(s=>s.symbol===el.dataset.symbol)||null;render();});
+  const buy=document.getElementById('buyTab'),sell=document.getElementById('sellTab'); if(buy)buy.onclick=()=>{state.side='buy';render()}; if(sell)sell.onclick=()=>{state.side='sell';render()};
+  const tradeBtn=document.getElementById('tradeBtn'); if(tradeBtn)tradeBtn.onclick=doTrade;
+}
+function row(s){const move=pct(s.price,s.previousPrice);const qty=Number(state.profile?.holdings?.[s.symbol]||0);return `<tr class="stock-row" data-symbol="${esc(s.symbol)}"><td><div class="symbol">${esc(s.symbol)}</div><div class="muted">${esc(s.name)}</div></td><td><strong>${credits(s.price)}</strong></td><td class="${move>=0?'up':'down'}">${move>=0?'+':''}${move.toFixed(2)}%</td><td>${qty}</td></tr>`;}
+function tradeForm(){const s=state.selected||state.stocks[0];if(!s)return `<div class="empty">Select a stock after stocks have been added.</div>`;state.selected=s;const owned=Number(state.profile?.holdings?.[s.symbol]||0);const maxBuy=Math.floor(Number(state.profile?.credits||0)/Number(s.price||1));return `<div class="trade-tabs"><button id="buyTab" class="tab ${state.side==='buy'?'active':''}">Buy</button><button id="sellTab" class="tab ${state.side==='sell'?'active':''}">Sell</button></div><div class="quote"><div><span class="muted">Stock</span><strong>${esc(s.symbol)}</strong></div><div><span class="muted">Price</span><strong>${credits(s.price)}</strong></div><div><span class="muted">You own</span><strong>${owned}</strong></div><div><span class="muted">Max</span><strong>${state.side==='buy'?maxBuy:owned}</strong></div></div><div class="field"><label>Quantity</label><input id="qty" type="number" min="1" step="1" value="1" /></div><button class="primary" id="tradeBtn">${state.side==='buy'?'Buy':'Sell'} ${esc(s.symbol)}</button>`;}
+function holdingsTable(){const holdings=Object.entries(state.profile?.holdings||{}).filter(([,q])=>Number(q)>0);if(!holdings.length)return `<div class="empty">You do not own any shares yet.</div>`;return `<table><thead><tr><th>Stock</th><th>Shares</th><th>Value</th></tr></thead><tbody>${holdings.map(([sym,q])=>{const s=state.stocks.find(x=>x.symbol===sym);return `<tr><td class="symbol">${esc(sym)}</td><td>${q}</td><td>${credits(Number(q)*Number(s?.price||0))}</td></tr>`}).join('')}</tbody></table>`;}
+
+function renderAuth(){root.innerHTML=`<div class="auth-wrap"><section class="card auth"><h1>Pretend Market</h1><p>Free fictional trading for up to 10 members. No real money is involved.</p>${state.error?`<div class="error">${esc(state.error)}</div>`:''}${state.message?`<div class="success">${esc(state.message)}</div>`:''}<div id="authForm"></div></section></div>`;renderAuthForm('signup');}
+function renderAuthForm(mode){const box=document.getElementById('authForm');if(!box)return;box.innerHTML=`<div class="field"><label>Username</label><input id="username" autocomplete="username" maxlength="20" placeholder="e.g. alex_trader" /></div><div class="field"><label>Password</label><input id="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" /></div>${mode==='signup'?'<div class="field"><label>Confirm password</label><input id="confirm" type="password" autocomplete="new-password" /></div>':''}<button class="primary" id="authBtn">${mode==='signup'?'Create account':'Sign in'}</button><div class="auth-toggle">${mode==='signup'?'Already a member?':'New here?'} <span class="link" id="toggle">${mode==='signup'?'Sign in':'Create account'}</span></div>`;document.getElementById('authBtn').onclick=()=>handleAuth(mode);document.getElementById('toggle').onclick=()=>{state.error=null;state.message=null;renderAuth();renderAuthForm(mode==='signup'?'signin':'signup');};}
+function usernameEmail(u){return `${u.toLowerCase()}@pretendmarket.local`;}
+async function handleAuth(mode){state.error=null;state.message=null;const u=document.getElementById('username').value.trim();const pw=document.getElementById('password').value;if(mode==='signup'&&pw!==document.getElementById('confirm').value){state.error='Passwords do not match.';renderAuth();return;}if(!/^[A-Za-z0-9_]{3,20}$/.test(u)){state.error='Username must be 3-20 letters, numbers, or underscores.';renderAuth();return;}try{if(mode==='signin'){await signInWithEmailAndPassword(auth,usernameEmail(u),pw);return;}
+  const usernameLower=u.toLowerCase();
+  const existing=await getDocs(query(collection(db,'profiles'),where('usernameLower','==',usernameLower),limit(1)));
+  if(!existing.empty)throw new Error('That username is already taken.');
+  const userCred=await createUserWithEmailAndPassword(auth,usernameEmail(u),pw);await updateProfile(userCred.user,{displayName:u});
+  try{
+    await runTransaction(db,async tx=>{const stateRef=doc(db,'market','state');const profileRef=doc(db,'profiles',userCred.user.uid);const stateSnap=await tx.get(stateRef);const count=Number(stateSnap.exists()?stateSnap.data().memberCount||0:0);if(count>=MAX_MEMBERS)throw new Error('The market is full (10 members maximum).');tx.set(stateRef,{memberCount:count+1,maxMembers:MAX_MEMBERS},{merge:true});tx.set(profileRef,{username:u,usernameLower,credits:STARTING_CREDITS,holdings:{},createdAt:serverTimestamp(),active:true});});
+    state.message='Account created. You start with 1,000 practice credits.';
+  }catch(e){try{await deleteUser(userCred.user)}catch(_){}throw e;}
+}catch(e){state.error=(e?.message||'Could not complete that request.').replace('Firebase: ','');renderAuth();}}
+
+async function doTrade(){const s=state.selected||state.stocks[0];const qty=Number(document.getElementById('qty').value);state.error=null;state.message=null;if(!Number.isInteger(qty)||qty<=0){state.error='Enter a whole number of shares.';render();return;}if(!auth.currentUser)return;try{let result;await runTransaction(db,async tx=>{const profileRef=doc(db,'profiles',auth.currentUser.uid);const stockRef=doc(db,'stocks',s.symbol);const tradeRef=doc(collection(db,'trades'));const [profileSnap,stockSnap]=await Promise.all([tx.get(profileRef),tx.get(stockRef)]);if(!profileSnap.exists())throw new Error('Your profile could not be found.');if(!stockSnap.exists())throw new Error('Stock does not exist.');const p=profileSnap.data();const stock=stockSnap.data();const price=Number(stock.price);const holdings={...(p.holdings||{})};const current=Number(holdings[s.symbol]||0);if(!Number.isFinite(price)||price<=0)throw new Error('Invalid stock price.');const total=Math.round(price*qty*100)/100;if(state.side==='buy'&&total>Number(p.credits||0))throw new Error('Not enough practice credits.');if(state.side==='sell'&&qty>current)throw new Error('You do not own enough shares.');const newQty=current+(state.side==='buy'?qty:-qty);if(newQty===0)delete holdings[s.symbol];else holdings[s.symbol]=newQty;const newCredits=Math.round((Number(p.credits||0)+(state.side==='buy'?-total:total))*100)/100;tx.set(profileRef,{credits:newCredits,holdings,updatedAt:serverTimestamp()},{merge:true});tx.set(tradeRef,{uid:auth.currentUser.uid,username:p.username,symbol:s.symbol,side:state.side,quantity:qty,price,total,createdAt:serverTimestamp()});result={total};});state.message=`${state.side==='buy'?'Bought':'Sold'} ${qty} ${s.symbol} for ${credits(result.total)}.`;}catch(e){state.error=(e?.message||'Trade failed.').replace('Firebase: ','');}render();}
+
+function listen(){if(unsubStocks)unsubStocks();if(unsubMarket)unsubMarket();unsubStocks=onSnapshot(collection(db,'stocks'),snap=>{state.stocks=snap.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>a.symbol.localeCompare(b.symbol));if(!state.selected&&state.stocks[0])state.selected=state.stocks[0];if(state.selected&&!state.stocks.some(s=>s.symbol===state.selected.symbol))state.selected=state.stocks[0]||null;render();},()=>{state.error='Could not load live market data.';render();});unsubMarket=onSnapshot(doc(db,'market','state'),snap=>{state.memberCount=Number(snap.data()?.memberCount||0);render();});}
+async function watchProfile(uid){if(unsubProfile)unsubProfile();unsubProfile=onSnapshot(doc(db,'profiles',uid),snap=>{state.profile=snap.exists()?snap.data():null;render();});}
+onAuthStateChanged(auth,async user=>{state.error=null;state.message=null;if(user){await watchProfile(user.uid);listen();}else{if(unsubStocks)unsubStocks();if(unsubProfile)unsubProfile();if(unsubMarket)unsubMarket();state.profile=null;state.stocks=[];state.memberCount=0;state.selected=null;renderAuth();}});
+</script>
+</body>
+</html>
